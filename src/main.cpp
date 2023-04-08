@@ -1,29 +1,25 @@
 #include <Arduino.h>
 
 #include <WiFiClientSecure.h>
-#include <ArduinoJson.h>
+// #include <ArduinoJson.h>
 #include <knownwifi.h>
 
-// #include <WiFi.h>
-// #include <WebServer.h>
-// #include <ESPmDNS.h>
-// #include <Update.h>
 // #include <toneAC.h>
+
+void print_mac(const unsigned char *mac);
+void macTest();
 
 // Melody liberated from the toneMelody Arduino example sketch by Tom Igoe.
 int melody[] = {262, 196, 196, 220, 196, 0, 247, 262};
 int noteDurations[] = {4, 8, 8, 4, 4, 4, 4, 4};
 
+/* WIFI ZONE */
 const char *host = "esp32";
 int status = WL_IDLE_STATUS; // the Wifi radio's status
 unsigned long wifiLastCheck = 0;
 long checkForWifiInterval = 30000; // milliseconds between checks for wifi
 void joinWifi();
-const char *ssid = "Great Ashley Farm Cottage";
-const char *password = "SessionsHeadcount26";
-
-// const char *ssid = "Great Ashley Farm Yard";
-// const char *password = "PyjX7nFXakRK";
+/* END WIFI ZONE */
 
 const char *server = "lambcam.webstaging.co.uk"; // Server URL
 
@@ -82,45 +78,41 @@ char * thing;
 #define TXD2 26
 const unsigned int MAX_MESSAGE_LENGTH = 30;
 int baudrate = 9600;
-StaticJsonDocument<96> doc;
+// StaticJsonDocument<96> doc;
 char output[96];
+
+String wifiMacString;
+void readRFID();
+void postRFID();
+
 
 void setup()
 {
   
-
-  doc["sensor"] = "handeid";
-  doc["user"] = 1;
+  // doc["sensor"] = "handeid";
+  // doc["eid"] = 123;
 
   Serial.begin(115200);
   delay(100);
+
   // Wifi connection
-
   joinWifi();
-  // Serial.print("Attempting to connect to SSID: ");
-  // Serial.println(ssid);
-  // WiFi.begin(ssid, password);
 
-  // // attempt to connect to Wifi network:
-  // while (WiFi.status() != WL_CONNECTED)
-  // {
-  //   Serial.print(".");
-  //   // wait 1 second for re-trying
-  //   delay(1000);
-  // }
-
-  // Serial.print("Connected to ");
-  // Serial.println(ssid);
+  // set the id to the mac address
+  String wifiMacString = WiFi.macAddress();
+  wifiMacString.replace(":", "");
+  Serial.println(wifiMacString);
 
   // Initialise the RFID reader on Serial2
   Serial2.begin(9600, SERIAL_8N1, RXD2, TXD2, false, 50);
 
   Serial.println("setup complete");
-  
-  thing = "VER\r";
-  Serial2.write(thing, sizeof(thing));
-  thing = "MOS\r";
-  Serial2.write(thing, sizeof(thing));
+
+ 
+  // thing = "VER\r";
+  // Serial2.write(thing, sizeof(thing));
+  // thing = "MOS\r";
+  // Serial2.write(thing, sizeof(thing));
 }
 
 void loop()
@@ -133,79 +125,92 @@ void loop()
    // Serial2.write(c, sizeof(c));
   }
 
+  readRFID();
   
+}
 
+
+void readRFID()
+{
+  // if there's data available from the rfid reader, read a packet
   if (Serial2.available())
   {
-    //Create a place to hold the incoming message
+    // Create a place to hold the incoming message
     static char message[MAX_MESSAGE_LENGTH];
     static unsigned int message_pos = 0;
 
-    //Read the next available byte in the serial receive buffer
+    // Read the next available byte in the serial receive buffer
     char inByte = Serial2.read();
 
-    //Message coming in (check not terminating character) and guard for over message size
+    // Message coming in (check not terminating character) and guard for over message size
     if (inByte != '\r' && (message_pos < MAX_MESSAGE_LENGTH - 1))
     {
-      //Add the incoming byte to our message
+      // Add the incoming byte to our message
       message[message_pos] = inByte;
       message_pos++;
     }
-    //Full message received...
+    // Full message received...
     else
     {
-      //Add null character to string
+      // Add null character to string
       message[message_pos] = '\0';
 
-      //Print the message (or do other things)
+      // Print the message (or do other things)
       Serial.println(message);
-      doc["eid"] = message;
-      serializeJson(doc, output);
-      Serial.println(output);
+      // doc["eid"] = message;
+      // serializeJson(doc, output);
+      // Serial.println(output);
       // doc["sensor"] = "handeid";
       // doc["user"] = 1;
-      String queryString = "sensor=bucket2&user=1&eid=" + String(message);
+      String queryString = "sensor=" + wifiMacString + "&eid = " + String(message);
       // "{\"api_key\":\"tPmAT5Ab3j7F9\",\"sensor\":\"BME280\",\"value1\":\"24.25\",\"value2\":\"49.54\",\"value3\":\"1005.14\"}");
-      Serial.println("\nStarting connection to server...");
-      client.setCACert(test_root_ca);
-      if (!client.connect(server, 443)){
-        Serial.println("Connection failed!");
-      }else
-      {
-        client.println("POST /api/v1/device/read-tag HTTP/1.1");
-        client.println("Host: lambcam.webstaging.co.uk");
-        client.println("User-Agent: Arduino/1.0");
-        client.println("Content-Type: application/x-www-form-urlencoded");
-        client.print("Content-Length: ");
-        client.println(queryString.length());
-        client.println("Connection: close");
-        client.println();
-        client.println(queryString);
-        client.println();
-          while (client.connected())
-          {
-            String line = client.readStringUntil('\n');
-            if (line == "\r")
-            {
-              Serial.println("headers received");
-              break;
-            }
-          }
-          // if there are incoming bytes available
-          // from the server, read them and print them:
-          while (client.available())
-          {
-            char c = client.read();
-            Serial.write(c);
-          }
+      
+      postRFID(queryString);
 
-          client.stop();
-        }
-       
-
-        // Reset for the next message
-        message_pos = 0;
+      // Reset for the next message
+      message_pos = 0;
     }
+  }
+}
+
+void postRFID(String queryString)
+{
+  Serial.println("\nStarting connection to server...");
+  client.setCACert(test_root_ca);
+  if (!client.connect(server, 443))
+  {
+    Serial.println("Connection failed!");
+  }
+  else
+  {
+    client.println("POST /api/v1/device/read-tag HTTP/1.1");
+    client.println("Host: lambcam.webstaging.co.uk");
+    client.println("User-Agent: Arduino/1.0");
+    client.println("Content-Type: application/x-www-form-urlencoded");
+    client.print("Content-Length: ");
+    client.println(queryString.length());
+    client.println("Connection: close");
+    client.println();
+    client.println(queryString);
+    client.println();
+    while (client.connected())
+    {
+      String line = client.readStringUntil('\n');
+      if (line == "\r")
+      {
+        Serial.println("headers received");
+        break;
+      }
+    }
+    // if there are incoming bytes available
+    // from the server, read them and print them:
+    while (client.available())
+    {
+      char c = client.read();
+      Serial.write(c);
+    }
+
+    client.stop();
   }
 }
 
