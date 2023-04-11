@@ -6,9 +6,6 @@
 
 // #include <toneAC.h>
 
-void print_mac(const unsigned char *mac);
-void macTest();
-
 // Melody liberated from the toneMelody Arduino example sketch by Tom Igoe.
 int melody[] = {262, 196, 196, 220, 196, 0, 247, 262};
 int noteDurations[] = {4, 8, 8, 4, 4, 4, 4, 4};
@@ -17,7 +14,7 @@ int noteDurations[] = {4, 8, 8, 4, 4, 4, 4, 4};
 const char *host = "esp32";
 int status = WL_IDLE_STATUS; // the Wifi radio's status
 unsigned long wifiLastCheck = 0;
-long checkForWifiInterval = 30000; // milliseconds between checks for wifi
+long checkForWifiInterval = 60000; // milliseconds between checks for wifi
 void joinWifi();
 /* END WIFI ZONE */
 
